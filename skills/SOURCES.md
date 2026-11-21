@@ -8,9 +8,9 @@
 
 `kernel-verification` 按用户最新要求收敛为：每个优化版本对每种确定输入，与 reference 的所有输出做自定义阈值精度比较，返回逐输入 pass/fail。历史下游检查和同步诊断经验不再作为该 skill 的必需流程。
 
-`iterate-kernel-optimization` 按用户最新要求采用最简流程：先从 reference 实现首版 megakernel，再按改进实现、使用 `use-kernel-tools` 做 profiling 并充分预热/重复测量端到端平均耗时、分析结果的顺序迭代。
+`iterate-kernel-optimization` 按用户最新要求采用最简流程：先从 reference 实现首版 megakernel，再按改进实现、使用 `kernel-profiling` 做 profiling 并充分预热/重复测量端到端平均耗时、分析结果的顺序迭代。
 
-版本从 `v0` 开始，每轮新建递增的 `v{xxx}` 文件夹。`use-kernel-tools` 使用 NCU、CUPTI、侵入式 timestamp 插桩；本轮实际 profiling 与端到端数据保留在对应版本目录，临时自检文件留在 `tmp/`。
+版本从 `v0` 开始，每轮新建递增的 `v{xxx}` 文件夹。`kernel-profiling` 使用 NCU、CUPTI、侵入式 timestamp 插桩；本轮实际 profiling 与端到端数据保留在对应版本目录，临时自检文件留在 `tmp/`。
 
 来源路径用于追溯，不是运行依赖。迁移后六个 skill 自身及其模板仍可使用；复现历史实验才需要相应项目与原始产物。
 

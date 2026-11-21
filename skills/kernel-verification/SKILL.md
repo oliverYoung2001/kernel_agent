@@ -1,43 +1,34 @@
 ---
 name: kernel-verification
-description: Compare every output of an optimization version against a reference on each fixed kernel input, apply configurable numerical thresholds, and return one pass or fail per input.
+description: Verify every kernel implementation against the first declared baseline on identical inputs through run.py --mode verify, comparing all outputs under configurable numerical thresholds.
 ---
 
 # Kernel 精度 verification
 
-在 agent 每次迭代产生一个优化版本后，对 kernel 定义的每一种确定输入运行该版本与 reference，比较所有输出，返回逐输入的 `pass` / `fail`。
+## 原理
 
-## 输入
+每种 kernel 按声明顺序选择第一个 baseline 作为 ground truth。只有一个 baseline 时就使用该实现。同一输入上，其他所有 baseline、reference 和当前实验的所有版本都分别与 ground truth 比较。ground truth 负责生成期望输出，记录其身份和执行状态；候选版本的排名或命令行筛选顺序不影响 ground truth 的选择。
 
-- 当前优化版本的 Python function 和 reference function，两者使用相同的显式输入/输出接口。
-- kernel 已定义的全部输入 case，暂定每种 kernel 20 组；复用输入生成器，不在 verifier 内重新定义 shape、dtype 或分布。
-- reference 的全部输出名称，包括 output 和 inout 参数；例如 KDA 的 `out` 与 `final_state`。
-- 自定义精度阈值，可统一设置或按输出分别设置，例如 atol/rtol、scaled_max、rmse_ratio。阈值在本轮比较前确定，多个 gate 同时设置时需要全部满足。
+## verification代码入口
 
-## 对每一种输入执行
+统一通过 kernel 根目录的 `run.py --mode verify` 执行。默认枚举当前实验的全部待验证实现，运行全部固定 case 和 kernel 定义的专项精度检查。人工复查时可指定实现和 case。优化采集、最终复测和报告补测也调用该模式。
 
-1. 将该 case 具体化一次，得到确定的 tensor 值和 scalar 参数。
-2. 为 reference 与当前优化版本准备数值相同、存储独立的实参。恢复相同初始状态和 inout 初值，分别预分配输出。
-3. 分别调用 reference 和当前版本，等待计算完成；不能让 reference 的写入成为当前版本的输入。
-4. 比较 reference 声明的**所有输出、所有元素**。按接口核对 shape/dtype，检查非有限值，并应用本轮自定义精度阈值。
-5. 所有输出均满足要求时，该输入返回 `pass`；任一输出超限、缺失、结构错误、非有限或运行异常时，返回 `fail`。
-6. 继续验证其余输入，不在首个 fail 后结束整个输入集合。
+以 KDA 为例，从仓库根目录执行：
 
-执行流程和阈值公式见 [verification 实现方法](references/verification-implementation.md)。
-
-## 返回值
-
-verification 的主要结果就是一组输入 ID 到 `pass` / `fail` 的映射：
-
-```json
-{
-  "kda_01": "pass",
-  "kda_02": "fail"
-}
+```bash
+export KDA_EXPERIMENT=experiment1
+python -m kernels.kda_megakernel.run --mode verify --list
+python -m kernels.kda_megakernel.run --mode verify
+python -m kernels.kda_megakernel.run --mode verify --impl v0 --case weak-packed
 ```
 
-这是格式示例，不是已运行结果。真实执行需要为全部输入返回一个状态；20 组输入就应有 20 个互不重复的输入 ID。只有全部为 pass，当前版本才整体通过精度验证。结果格式也见 [JSON 示例](templates/verification-result.json)。
+## verification代码生成
 
-没有运行某组输入时，不能将它填成 pass 或宣称验证完成。实际运行中的异常应记为 fail；资源不足导致整个验证无法完成时，保留实际进度并明确未完成。
+每个 kernel 的 `run.py` 只负责解析参数和分派功能。`kernels/{kernel_name}/verification/` 负责选择 ground truth、枚举待测实现、准备独立输入、运行标准和专项 case、比较全部输出、判定和保存结果。复用 kernel 的 baseline、reference、版本实现和输入生成器。
 
-误差数值、失败输出名称、异常信息等辅助诊断按需放到 `tmp/`，不扩充主要返回值。仅供 agent 自检的脚本、日志和临时报告也放 `tmp/`。生成代码的注释使用英文。
+1. 对每个 case 具体化一次输入，保留标量、权重和 inout 初值。给 ground truth 和每个候选提供数值一致、存储独立的参数及输出缓冲区。
+2. 先执行 ground truth 并等待完成，保存全部输出。对每个候选执行同一 case，按接口检查所有 output 和 inout 终值的 shape、dtype、有限性，以及每个元素参与的误差指标。
+3. 使用运行前指定的阈值。一个 case 的所有输出和门限均通过时该候选才通过。任何实现执行或比较异常都记录原因，继续其余输入。ground truth 执行失败时，该输入的候选不能通过。
+4. 按实现保存输入 ID 到 `pass` / `fail` 的结果，记录 ground truth、阈值和源码身份。专项检查标明 case 名。正式记录保存在对应实验的实现目录，临时诊断写入该实验的 `tmp/`。更换 ground truth 后重新验证，保留历史结果及其对照身份。
+
+阈值公式与遍历流程见 [verification 实现方法](references/verification-implementation.md)。逐输入结果示例见 [JSON 示例](templates/verification-result.json)。生成代码的注释使用英文。

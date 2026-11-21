@@ -1,6 +1,6 @@
 ---
 name: prepare-environment
-description: Build and activate the Conda linear environment and Spack numactl 2.0.18 and GCC 13.4.0 environment used by LACP scripts/envs.sh, with the CUDA 13.2 compiler installed inside Conda.
+description: Build and activate the Conda linear environment and Spack numactl 2.0.18 and GCC 13.4.0 environment used by LACP scripts/envs.sh, including the CUDA 13.2 compiler and FlashKDA compiled for the GPU visible on the compute node.
 ---
 
 # 构建与激活 Conda / Spack 环境
@@ -16,6 +16,8 @@ description: Build and activate the Conda linear environment and Spack numactl 2
 | torchvision / torchaudio | 环境内 pip | `0.26.0` / `2.11.0` |
 | CUDA nvcc / crt / runtime / cccl / nvvm | 环境内 pip | `13.2.86` |
 | CUDA_HOME | Conda 内的 CUDA 包目录 | `$CONDA_PREFIX/lib/python3.12/site-packages/nvidia/cu13` |
+| causal_conv1d | 激活 `linear` 后用 pip 安装 | 本机实测版本 `1.7.0` |
+| FlashKDA | 环境内从源码编译安装 | `MoonshotAI/FlashKDA`，从计算节点当前可见 GPU 探测目标架构 |
 | numactl | Spack | `numactl@2.0.18` |
 | GCC | Spack | `gcc@13.4.0` |
 
@@ -54,7 +56,35 @@ python -m pip install \
     nvidia-nvvm==13.2.86
 ```
 
-先安装 PyTorch，再安装来源环境对应的 CUDA 13.2 组件。构建后脚本自动加载同目录的 `envs.sh`，检查 Python、nvcc、GCC、numactl 和 PyTorch，并打印完成信息。脚本通过自身位置定位文件，可从任意工作目录运行。项目自己的 Python 包和 CUDA 扩展按项目要求安装。
+先安装 PyTorch，再安装来源环境对应的 CUDA 13.2 组件。脚本随后加载同目录的 `envs.sh`，使 CUDA 和 GCC 就绪，再执行下一节的 FlashKDA 安装。最后检查 Python、nvcc、GCC、numactl、PyTorch 和 FlashKDA 导入，并打印完成信息。脚本通过自身位置定位文件，可从任意工作目录运行。
+
+## 安装 causal_conv1d
+
+在已有的 `linear` 环境中，或在首次运行 `build.sh` 完成后，执行以下步骤安装因果卷积扩展并检查前向、反向接口。已有安装时可直接执行导入检查。
+
+```bash
+conda activate linear
+python -m pip install causal_conv1d
+python -c 'from causal_conv1d.cpp_functions import _causal_conv1d_fwd_cpp, _causal_conv1d_bwd_cpp'
+```
+
+## 安装 FlashKDA
+
+`build.sh` 会将 FlashKDA 安装到新建的 `linear` 环境中。源码默认放在 `$HOME/flash-kda`，可通过 `KERNEL_FLASH_KDA_ROOT` 指定其他路径；目录已存在时复用源码，不重新克隆。
+
+已有 `linear` 环境时，在本仓库根目录执行以下命令单独补装 FlashKDA（已有源码则跳过 `git clone`）：
+
+```bash
+source skills/prepare-environment/envs.sh
+python -m pip install setuptools wheel ninja
+git clone https://github.com/MoonshotAI/FlashKDA.git "${KERNEL_FLASH_KDA_ROOT:-$HOME/flash-kda}"
+cd "${KERNEL_FLASH_KDA_ROOT:-$HOME/flash-kda}"
+git submodule update --init --recursive
+python -m pip install -v --no-build-isolation .
+python -c 'import flash_kda; print("FlashKDA:", flash_kda.__file__)'
+```
+
+在分配到 GPU 的计算节点执行安装。FlashKDA 默认读取当前 CUDA 设备的计算能力；H100 PCIe 和 H20 均生成 `sm_90a`。需要交叉编译时可显式设置 `FLASH_KDA_CUDA_ARCHS`。`--no-build-isolation` 使用已激活的 `linear` 环境中的 PyTorch 和构建依赖；编译仍需要该环境的 CUDA Toolkit 和 GCC。
 
 ## 每次激活
 
@@ -95,6 +125,7 @@ nvcc --version
 gcc --version
 numactl --version
 python -c 'import torch; print(torch.__version__, torch.version.cuda)'
+python -c 'import flash_kda; print(flash_kda.__file__)'
 ```
 
-预期分别为 `linear`、Python 3.12.12、nvcc 13.2、GCC 13.4.0、numactl 2.0.18 和 PyTorch `2.11.0+cu130 / 13.0`。这里只检查环境构建/激活；不运行模型、kernel 测试或 benchmark。
+预期分别为 `linear`、Python 3.12.12、nvcc 13.2、GCC 13.4.0、numactl 2.0.18、PyTorch `2.11.0+cu130 / 13.0`，以及 `linear` 环境内的 FlashKDA 模块路径。这里只检查环境构建/激活与扩展导入；不运行模型、kernel 测试或 benchmark。

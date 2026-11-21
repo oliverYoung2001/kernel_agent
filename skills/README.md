@@ -9,13 +9,13 @@
 | Skill | 什么时候用 | 主要交付 |
 |---|---|---|
 | [prepare-environment](prepare-environment/SKILL.md) | 构建和激活 LACP 使用的 Conda/Spack 环境 | 一键构建 [build.sh](prepare-environment/build.sh)，激活 [envs.sh](prepare-environment/envs.sh) |
-| [kernel-verification](kernel-verification/SKILL.md) | 每轮检查优化版本在全部输入上的输出精度 | 与 reference 比较所有输出，按自定义门限逐输入返回 pass/fail |
+| [kernel-verification](kernel-verification/SKILL.md) | 每轮检查优化版本在全部输入上的输出精度 | 与首个 baseline 比较所有输出，按自定义门限逐输入返回 pass/fail |
 | [describe-gpu-kernel](describe-gpu-kernel/SKILL.md) | 定义 kernel case、解释并行结构与工作量 | 显式 Python 输入/输出接口、reference、20 组输入，以及实现结构/依赖描述 |
-| [iterate-kernel-optimization](iterate-kernel-optimization/SKILL.md) | 从 `v0` 开始，每轮新建 `v{xxx}` 改进实现 | 改进实现 → profiling/端到端平均耗时测试 → 分析并决定下一轮改进 |
-| [use-kernel-tools](use-kernel-tools/SKILL.md) | 使用 NCU、CUPTI、侵入式 timestamp 插桩做 profiling | profiling 与端到端数据保留在对应的 `v{xxx}` 文件夹 |
-| [report-kernel-experiments](report-kernel-experiments/SKILL.md) | 汇总全部 baseline 和版本的实验结果 | kernel 的 `reports/` 下保存报告、计算/访存指标和版本对比图；baseline 用虚线 |
+| [iterate-kernel-optimization](iterate-kernel-optimization/SKILL.md) | 至少 10 轮，从 `v0` 开始，每轮新建 `v{xxx}` 改进实现 | 改进实现 → profiling/端到端平均耗时测试 → 分析并决定下一轮改进 |
+| [kernel-profiling](kernel-profiling/SKILL.md) | 使用 NCU、CUPTI、侵入式 timestamp 插桩做 profiling | profiling 与端到端数据保留在对应的 `v{xxx}` 文件夹 |
+| [report-kernel-experiments](report-kernel-experiments/SKILL.md) | 汇总全部 baseline 和版本的实验结果 | 当前实验的 `reports/` 下保存报告、计算/访存指标和版本对比图；baseline 用虚线 |
 
-每个 skill 都有 YAML `name`/`description` 和 Markdown 正文。详细模板放在各 skill 的 `references/` 或 `templates/`，按需读取。优化循环会使用 `kernel-verification` 检查精度，并使用 `use-kernel-tools` 做 profiling。
+每个 skill 都有 YAML `name`/`description` 和 Markdown 正文。详细模板放在各 skill 的 `references/` 或 `templates/`，按需读取。优化循环会使用 `kernel-verification` 检查精度，并使用 `kernel-profiling` 做 profiling。
 
 ## 如何在不同模型或 harness 中使用
 
@@ -56,8 +56,8 @@ source skills/prepare-environment/envs.sh
 
 ```text
 阅读 skills/kernel-verification/SKILL.md 及其验证实现规范。
-让当前优化版本与 reference 接收同一组确定输入和初始状态，
-比较 reference 的所有输出，并使用我设置的精度阈值。
+让待测实现与第一个 baseline 接收同一组确定输入和初始状态，
+与第一个 baseline 比较所有输出，并使用我设置的精度阈值。
 对 kernel 的全部 20 组输入逐一执行，返回输入 ID 到 pass/fail 的映射。
 ```
 
@@ -80,18 +80,19 @@ source skills/prepare-environment/envs.sh
 阅读 skills/iterate-kernel-optimization/SKILL.md，
 先依据 reference 实现 megakernel，保存到 v0/。
 之后每轮新建 v1/、v2/ 等版本目录，在新目录改进实现，
-再使用 use-kernel-tools 的 NCU、CUPTI 或 timestamp 插桩做 profiling，
+再使用 kernel-profiling 的 NCU、CUPTI 或 timestamp 插桩做 profiling，
 并在充分 warmup 后重复足够次数，计算端到端耗时的算术平均值。
 本轮代码、profiling 和端到端数据都保存在对应的版本文件夹。
 最后分析 profiling 与性能结果，用来决定下一轮改进。
 每次改动后用 kernel-verification 检查全部输入的精度。
+至少完成 10 轮（v0 计为第 1 轮，从零开始至少到 v9），同一任务已有完整证据的轮次可累计，重复补测不计新增轮次。
 ```
 
 生成实验报告：
 
 ```text
 阅读 skills/report-kernel-experiments/SKILL.md。
-将 kda_megakernel 的报告保存到 kernels/kda_megakernel/reports/。
+将 kda_megakernel 的报告保存到 kernels/kda_megakernel/experiment0/reports/。
 覆盖 baseline_fla、baseline_flashkda 和全部 v{xxx}，对全部输入分别列出：
 完整调用平均时间，Tensor/CUDA Core 的 TFLOP、TFLOP/s 和理论峰值利用率，
 DRAM/shared 的 load/store traffic、throughput 和理论带宽利用率。
@@ -138,7 +139,7 @@ skills/
 ├── iterate-kernel-optimization/
 │   ├── SKILL.md
 │   └── references/iteration-record.md
-├── use-kernel-tools/
+├── kernel-profiling/
 │   ├── SKILL.md
 │   └── references/tool-evidence.md
 └── report-kernel-experiments/
@@ -151,8 +152,8 @@ skills/
 
 格式、引用和模板有效只是这套说明文件的校验；真正使用后仍需执行当前 kernel 的测试与测量。
 
-仅供 agent 使用的自检脚本、临时日志和检查报告统一放在 `tmp/`；该目录已由 `.gitignore` 排除。
+仅供 agent 使用的自检脚本、临时日志和检查报告放在当前实验的 `tmp/`；该目录已由 `.gitignore` 排除。
 
-优化的正式产物保留在 `kernels/<kernel-name>/v0/`、`v1/` 等目录：每轮源码、`profiling/` 下的工具数据与 `end_to_end.json` 必须属于同一版本，不能覆盖旧版或混入其他版本结果。
+优化的正式产物保留在 `kernels/<kernel-name>/experiment{N}/v0/`、`v1/` 等目录：每轮源码、`profiling/` 下的工具数据与 `end_to_end.json` 必须属于同一版本，不能覆盖旧版或混入其他版本结果。
 
-报告及其汇总数据、图片放在 `kernels/<kernel-name>/reports/`，原始测量数据仍留在对应版本。新采集的 baseline 数据放在 `kernels/<kernel-name>/baselines/<baseline-name>/`，不占用 `v{xxx}` 编号。
+报告及其汇总数据、图片放在 `kernels/<kernel-name>/experiment{N}/reports/`，原始测量数据仍留在对应版本。新采集的 baseline 数据放在 `kernels/<kernel-name>/experiment{N}/baselines/<baseline-name>/`，不占用 `v{xxx}` 编号。

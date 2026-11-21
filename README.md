@@ -41,10 +41,10 @@ kernels/kda_megakernel；同时读取该 skill 引用的必要文件。
 |---|---|---|
 | [prepare-environment](skills/prepare-environment/SKILL.md) | 构建和激活 LACP 配置的 Conda/Spack 环境 | `build.sh` 构建；`envs.sh` 激活 |
 | [describe-gpu-kernel](skills/describe-gpu-kernel/SKILL.md) | 定义 Python 接口、reference 和 20 组不同输入，描述计算与依赖 | `kernels/<name>/` 中的 case 文件与说明 |
-| [kernel-verification](skills/kernel-verification/SKILL.md) | 当前版本与 reference 使用相同确定输入，对比所有输出 | 全部输入 ID 到 `pass` / `fail` 的映射 |
-| [iterate-kernel-optimization](skills/iterate-kernel-optimization/SKILL.md) | 首版实现及后续逐轮改进、测量、分析 | 从 `v0/` 起递增的版本目录 |
-| [use-kernel-tools](skills/use-kernel-tools/SKILL.md) | NCU、CUPTI、侵入式 timestamp profiling 与独立端到端测试 | 对应版本内的 `profiling/`、`end_to_end.json` |
-| [report-kernel-experiments](skills/report-kernel-experiments/SKILL.md) | 汇总所有 baseline、版本及输入，生成报告和版本对比图 | kernel 的 `reports/` 下的报告、汇总数据与图片 |
+| [kernel-verification](skills/kernel-verification/SKILL.md) | 各实现与首个 baseline 使用相同确定输入，对比所有输出 | 全部输入 ID 到 `pass` / `fail` 的映射 |
+| [iterate-kernel-optimization](skills/iterate-kernel-optimization/SKILL.md) | 至少 10 轮实现、改进、测量与分析 | 从 `v0/` 起递增的版本目录 |
+| [kernel-profiling](skills/kernel-profiling/SKILL.md) | NCU、CUPTI、侵入式 timestamp profiling 与独立端到端测试 | 对应版本内的 `profiling/`、`end_to_end.json` |
+| [report-kernel-experiments](skills/report-kernel-experiments/SKILL.md) | 汇总所有 baseline、版本及输入，生成报告和版本对比图 | 当前实验的 `reports/` 下的报告、汇总数据与图片 |
 
 ## 分别调用
 
@@ -72,7 +72,7 @@ bash skills/prepare-environment/build.sh
 source skills/prepare-environment/envs.sh
 ```
 
-`build.sh` 以 LACP 的配置构建 `linear`、CUDA 编译工具链和 Spack numactl/GCC，已有 `linear` 时不覆盖。已有环境可跳过构建。构建脚本不能修改调用它的父 shell；需要用 `source envs.sh` 激活。Codex 使用新的 shell 执行后续命令时，应在该 shell 中重新 source。kernel 自身的 FLA/FlashKDA 等依赖按 [case 说明](kernels/kda_megakernel/README.md) 另行准备。
+`build.sh` 以 LACP 的配置构建 `linear`、CUDA 编译工具链和 Spack numactl/GCC，并从源码按计算节点可见 GPU 的计算能力编译安装 FlashKDA，已有 `linear` 时不覆盖。已有环境可跳过构建，按 [prepare-environment 的说明](skills/prepare-environment/SKILL.md#安装-flashkda) 单独补装 FlashKDA。构建脚本不能修改调用它的父 shell；需要用 `source envs.sh` 激活。Codex 使用新的 shell 执行后续命令时，应在该 shell 中重新 source。kernel 自身的 FLA 等其余依赖按 [case 说明](kernels/kda_megakernel/README.md) 另行准备。
 
 ### 定义和描述 kernel
 
@@ -90,33 +90,33 @@ $describe-gpu-kernel
 
 ```text
 $kernel-verification
-验证 kernels/kda_megakernel/v0/ 中的实现。
-对全部 20 组输入，与 reference.py/reference 比较 out 和 final_state 的所有元素。
+验证 kernels/kda_megakernel/experiment0/v0/ 中的实现。
+对全部 20 组输入，通过 run.py --mode verify 与第一个 baseline 比较 out 和 final_state 的所有元素。
 本次使用 scaled_max <= 0.01 且 rmse_ratio <= 0.01，两个条件同时满足才通过。
-返回每个输入 ID 对应的 pass/fail，诊断文件放在 tmp/。
+返回每个输入 ID 对应的 pass/fail，诊断文件放在当前实验的 tmp/。
 ```
 
-`v0` 和上述阈值只是调用示例，应换成要检查的版本及本次要求的阈值。reference 与候选版本使用数值一致、存储独立的输入，分别准备输出；任一输出失败则该输入为 fail，不在首个失败后停止其余输入。
+`v0` 和上述阈值只是调用示例，应换成要检查的版本及本次要求的阈值。ground truth 与候选版本使用数值一致、存储独立的输入，分别准备输出；任一输出失败则该输入为 fail，不在首个失败后停止其余输入。
 
 ### 迭代优化
 
 ```text
 $iterate-kernel-optimization
 优化 kernels/kda_megakernel，使用现有 reference、20 组输入及 baseline.py。
-若没有实现，先创建 v0；否则从当前版本继续，每轮新建下一个 v{xxx} 目录。
+新实验新建 experiment{N}/ 并从 v0 开始；恢复已有实验时从其当前版本继续。
 使用 kernel-verification 验证所有输出，本次 scaled_max 和 rmse_ratio 均不得超过 0.01。
-通过后使用 use-kernel-tools 做 profiling，并独立测量普通完整函数端到端平均时间。
+通过后使用 kernel-profiling 做 profiling，并独立测量普通完整函数端到端平均时间。
 warmup=100、repeat=1000 起步，按稳定性调整并记录实际次数。
-每轮分析结果后继续改进，本次完成 3 轮后停止并汇报。
+每轮分析结果后继续改进，至少完成 10 轮（v0 计为第 1 轮）后汇报。
 ```
 
-迭代顺序为：实现/改进 → 精度验证 → profiling 与端到端测试 → 分析结果。首版从 `v0` 开始，每轮保留源码和实际数据，不覆盖旧版。轮数、目标设备、阈值和测量次数可以在提示词中调整。
+迭代顺序为：实现/改进 → 精度验证 → profiling 与端到端测试 → 分析结果。首版从 `v0` 开始，至少完成 10 轮，即从零开始至少保留 `v0`–`v9` 的源码和实际数据，不覆盖旧版。继续已有任务时按已完成轮次补足，重复补测不计为新轮次；用户可指定更多轮、目标设备、阈值和测量次数。
 
 ### 单独 profiling 和计时
 
 ```text
-$use-kernel-tools
-分析 kernels/kda_megakernel/v0/ 的实现，对定义的全部输入分别采集。
+$kernel-profiling
+分析 kernels/kda_megakernel/experiment0/v0/ 的实现，对定义的全部输入分别采集。
 使用 NCU 分析 Tensor/CUDA Core 计算及 DRAM/shared 读写；
 需要执行时间线或阶段时间时，可使用 CUPTI 或侵入式 timestamp。
 独立运行普通完整函数计时，充分 warmup 后重复测量并取算术平均值。
@@ -129,7 +129,7 @@ $use-kernel-tools
 
 ```text
 $report-kernel-experiments
-为 kernels/kda_megakernel 生成报告，保存到其 reports/ 文件夹。
+为 kernels/kda_megakernel 生成报告，保存到当前实验的 reports/ 文件夹。
 覆盖 baseline_fla、baseline_flashkda 和全部已有版本，按全部 20 组输入分别比较。
 列出端到端平均耗时；Tensor/CUDA Core 的 TFLOP、TFLOP/s 和理论峰值利用率；
 DRAM/shared load/store 的 traffic、throughput 和理论带宽利用率。
@@ -138,7 +138,7 @@ DRAM/shared load/store 的 traffic、throughput 和理论带宽利用率。
 本次仅整理已有数据；缺测或不支持的项目注明原因，不启动新的 GPU 实验。
 ```
 
-如需补齐测量，将最后一句改为“补测缺失项，按 use-kernel-tools 保存原始结果后生成报告”，并指定可使用的 GPU/执行资源和测量预算。
+如需补齐测量，将最后一句改为“补测缺失项，按 kernel-profiling 保存原始结果后生成报告”，并指定可使用的 GPU/执行资源和测量预算。
 
 ## 组合使用
 
@@ -150,9 +150,9 @@ DRAM/shared load/store 的 traffic、throughput 和理论带宽利用率。
 $iterate-kernel-optimization $report-kernel-experiments
 目标为 kernels/kda_megakernel，使用已有环境、reference、20 组输入和两个 baseline。
 每轮用 kernel-verification 检查全部输出，本次 scaled_max 和 rmse_ratio 均 <= 0.01。
-从 v0 开始实现首版，已有版本则继续递增，完成 3 轮优化。
-每轮使用 use-kernel-tools，充分 warmup 后重复测量完整调用平均时间并分析 profiling。
-最后在该 kernel 的 reports/ 下生成全部 baseline/版本的指标表和性能/耗时对比图。
+从 v0 开始实现首版，已有版本则继续递增，至少完成 10 轮优化（含 v0）。
+每轮使用 kernel-profiling，充分 warmup 后重复测量完整调用平均时间并分析 profiling。
+最后在当前实验的 reports/ 下生成全部 baseline/版本的指标表和性能/耗时对比图。
 允许补测缺失数据；设备和资源使用本次任务指定的可用 GPU。
 ```
 
@@ -164,21 +164,28 @@ $iterate-kernel-optimization $report-kernel-experiments
 kernels/<kernel-name>/
 ├── reference.py
 ├── baseline.py
-├── inputs.py
-├── cases.json
-├── v0/
-│   ├── <implementation files>
-│   ├── profiling/
-│   └── end_to_end.json
-├── v1/
-│   └── ...
-├── baselines/<baseline-name>/
-│   ├── profiling/
-│   └── end_to_end.json
-└── reports/
-    ├── report.md
-    ├── metrics.json
-    └── figures/<input-id>_comparison.png
+├── run.py              # Shared reference/baseline/version runner
+├── verification/       # Shared numerical checks for all experiments
+├── profiling/          # Shared CUPTI and NCU collectors and trace analysis
+├── cases/
+│   ├── inputs.py
+│   ├── generate_cases.py
+│   ├── cases.json
+│   └── cases_0.json
+└── experiment{N}/
+    ├── v0/
+    │   ├── <implementation files>
+    │   ├── profiling/
+    │   └── end_to_end.json
+    ├── v1/
+    │   └── ...
+    ├── baselines/<baseline-name>/
+    │   ├── profiling/
+    │   └── end_to_end.json
+    └── reports/
+        ├── report.md
+        ├── metrics.json
+        └── figures/<input-id>_comparison.png
 ```
 
-以上是正式产物的保存约定，不表示当前已经存在所有版本、测量或报告。仅供 agent 使用的自检脚本、临时日志和检查产物放在 `tmp/`，该目录由 `.gitignore` 排除。
+以上是正式产物的保存约定，不表示当前已经存在所有版本、测量或报告。仅供 agent 使用的自检脚本、临时日志和检查产物放在当前实验的 `tmp/`，该目录由 `.gitignore` 排除。

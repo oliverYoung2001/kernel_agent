@@ -3,24 +3,24 @@
 ## 最小职责
 
 ```text
-verify_one(candidate, reference, fixed_input, output_names, thresholds)
+verify_one(candidate, ground_truth, fixed_input, output_names, thresholds)
     -> "pass" or "fail"
 
-verify_all(candidate, reference, input_cases, output_names, thresholds)
+verify_all(candidate, ground_truth, input_cases, output_names, thresholds)
     -> {input_id: "pass" or "fail"}
 ```
 
-这是职责示意，不要求使用固定的框架、函数名或 harness API。实现时复用 kernel 的 Python 接口、reference 和输入生成器。
+这是职责示意，不要求使用固定的框架、函数名或 harness API。实现时通过 run.py 的 verify 模式调用 verification/，复用 kernel 的 Python 接口、第一个 baseline 和输入生成器。
 
 ## 确定输入与全部输出
 
 同一个输入 case 只生成一次，再为两条执行路径复制 tensor。每次均从相同初始状态、相同 scalar 参数、相同 inout 初值开始；output buffer 的形状和 dtype 按接口分配。不能分别推进两个 RNG 来冒充共享输入。
 
-reference 通过输出参数写回时，比较这些输出缓冲区；通过返回值输出时，按接口提取全部命名输出。inout 的最终值也是输出。KDA 当前接口写回 `out` 和 `final_state`，两者都必须通过，才能给该输入返回 pass。
+ground truth 通过输出参数写回时，比较这些输出缓冲区；通过返回值输出时，按接口提取全部命名输出。inout 的最终值也是输出。KDA 当前接口写回 `out` 和 `final_state`，两者都必须通过，才能给该输入返回 pass。
 
-只比较 reference 接口声明的输出，不额外要求导出 kernel 内部中间变量。输出必须完整检查，不能用抽样元素或单个最终输出替代全部输出。
+只比较 kernel 接口声明的输出，不额外要求导出 kernel 内部中间变量。输出必须完整检查，不能用抽样元素或单个最终输出替代全部输出。
 
-异步执行后等待结果完成再读取或比较。对 shape/dtype 按接口核对；不通过广播、隐式 reshape 或降低比较精度掩盖错误。候选/reference 输出或误差归约出现 NaN/Inf 时，该输入 fail。
+异步执行后等待结果完成再读取或比较。对 shape/dtype 按接口核对；不通过广播、隐式 reshape 或降低比较精度掩盖错误。候选/ground truth 输出或误差归约出现 NaN/Inf 时，该输入 fail。
 
 ## 自定义阈值
 
@@ -44,7 +44,7 @@ thresholds = {
 | scaled_max | `max(d_i) / max(max(abs(r_i)), eps_scale) <= threshold` |
 | rmse_ratio | `sqrt(sum(d_i**2) / max(sum(r_i**2), eps_energy)) <= threshold` |
 
-epsilon、比较/归约精度和 dtype 策略随配置固定。常见的 scale/energy floor 示例为 1e-12 / 1e-24，不是精度门限。所有门限必须有限且非负；零 reference 的处理不能依赖除零或 NaN 比较行为。
+epsilon、比较/归约精度和 dtype 策略随配置固定。常见的 scale/energy floor 示例为 1e-12 / 1e-24，不是精度门限。所有门限必须有限且非负；全零 ground truth 的处理不能依赖除零或 NaN 比较行为。
 
 大输出可分块归约，但保留完整元素覆盖和全局 max/sum；不能平均各块的 ratio 代替全局指标。整数、索引或布尔输出按接口采用精确比较。
 
@@ -55,7 +55,7 @@ results = {}
 for input_case in all_declared_input_cases:
     try:
         shared_values = materialize_once(input_case)
-        expected = run_reference_with_independent_buffers(shared_values)
+        expected = run_ground_truth_with_independent_buffers(shared_values)
         actual = run_current_version_with_independent_buffers(shared_values)
         results[input_case.id] = compare_all_outputs(expected, actual, thresholds)
     except execution_or_comparison_error:

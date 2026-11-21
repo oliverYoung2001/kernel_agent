@@ -6,9 +6,10 @@
 kernels/<kernel-name>/
 ├── README.md       # 接口、语义、输入表、依赖、运行与验证范围
 ├── reference.py    # 显式 Python function 和可执行参考实现
-├── cases.json      # 20 个输入配方及参数；也可使用等价 Python 数据定义
-├── inputs.py       # 由配方生成全部 function arguments
-└── run.py          # 枚举/运行单个或多个 case 的简洁入口
+├── run.py         # 统一枚举/验证/reference/baseline/optimized 执行入口
+└── cases/          # case 数据与管理代码
+    ├── cases.json  # 20 个输入配方及参数
+    └── inputs.py   # manifest 公共 API、校验与全部 function arguments 生成
 ```
 
 文件名可以遵循已有仓库约定。reference 可以调用多个 device kernel；不需要为了形式强行融合。仅供 agent 使用的 reference 自检脚本、日志和结果放在 `tmp/`，不放入 kernel 交付目录。

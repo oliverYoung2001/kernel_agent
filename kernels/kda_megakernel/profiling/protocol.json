@@ -1,0 +1,16 @@
+{
+  "rounds": 3,
+  "cases": "all twenty unchanged cases.json recipes, including kda_20",
+  "thresholds": {"out": {"scaled_max": 0.01, "rmse_ratio": 0.01}, "final_state": {"scaled_max": 0.01, "rmse_ratio": 0.01}},
+  "epsilon_scale": 1e-12,
+  "epsilon_energy": 1e-24,
+  "comparison": "all elements, chunked FP64 error reductions; finite/shape/dtype gates",
+  "policy": "FP32 matmul precision highest; CUDA matmul and cuDNN TF32 disabled",
+  "timing": "perf_counter_ns, synchronize before and after full Python function; input generation/verification excluded; allocations/conversions inside function included",
+  "warmup_small": 100,
+  "repeat_small": 1000,
+  "warmup_large": 10,
+  "repeat_large": 30,
+  "large_reason": "64K production shape has substantial FP32 projection and serial recurrence work; preserve raw samples and check dispersion",
+  "selection": "full numerical gate first; same materialized inputs and GPU; paired confirmation before promotion"
+}
