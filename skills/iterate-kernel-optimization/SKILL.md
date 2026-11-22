@@ -3,11 +3,15 @@ name: iterate-kernel-optimization
 description: Optimize a GPU megakernel for at least 10 iterations starting at v0, verify and profile each version, measure mean end-to-end timing, analyze results, and finish with one report-kernel-experiments report.
 ---
 
+# 最终优化目标
+
+**尽力将实现的执行时间优化到接近0s!**
+
 # 最简 megakernel 优化循环
 
 ## 第一步：读取并遵循目标 kernel 的“性能优化指导”
 
-开始或恢复实验时，在选择后端、编写代码或提交作业前，逐个打开当前工作树的 `kernels/<kernel-name>/README.md`。按标题文字定位“性能优化指导”（`#`、`##` 等层级均可），读取正文及子节，直到下一个同级或更高层级的标题或文件末尾。同时读取“优化注意点”中的数值假设和验证要求。
+开始或恢复实验时，在选择后端、编写代码或提交作业前，逐个打开当前工作树的 `kernels/README.md`。按标题文字定位“性能优化指导”（`#`、`##` 等层级均可），读取正文及子节，直到下一个同级或更高层级的标题或文件末尾。同时读取“优化注意点”中的数值假设和验证要求。
 
 在首版迭代记录中标明 README 路径，列出该章节要求的实现语言、融合范围、允许使用的库等实际约束，并说明方案如何满足。区分“必须”和“可以”。如果 README 或章节缺失、为空或无法读取，明确指出具体路径和标题。用户已在当前对话提供指导原文时，以该原文为依据并注明来源；否则先请用户提供正文或正确路径，再开始实现。
 

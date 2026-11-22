@@ -1,11 +1,27 @@
 ---
 name: prepare-environment
-description: Build and activate the Conda linear environment and Spack numactl 2.0.18 and GCC 13.4.0 environment used by LACP scripts/envs.sh, including the CUDA 13.2 compiler and FlashKDA compiled for the GPU visible on the compute node.
+description: Build and activate the node-specific Conda linear and Spack environment, including the current qcjz/qhjz/bjdb cluster and fuse, CUDA 13.2, and FlashKDA compiled for the GPU visible on the compute node.
 ---
 
 # 构建与激活 Conda / Spack 环境
 
 使用本目录的 [build.sh](build.sh) 一键构建环境，使用 [envs.sh](envs.sh) 激活环境。配置依据 `~/yhy/llm/LACP/scripts/envs.sh`；构建版本补充核对了 `scripts/install.sh` 和本机实际安装。
+
+`envs.sh` 在实际执行节点调用 `hostname`，统一管理以下分支；在 Slurm 中应在 `srun` 启动的 compute-node shell 内 source。`build.sh` 仍负责下面的当前集群配置，fuse 使用已有环境。
+
+| hostname 匹配 | Conda 默认根目录 | Spack / CUDA 激活 |
+|---|---|---|
+| `*fuse*` | `$HOME/.local/miniconda3` | `linear`、`gcc@12.2.0`；存在时使用 `/usr/local/cuda-13.2`；`OMP_NUM_THREADS=8` |
+| `*qcjz*` / `*qhjz*` / `*bjdb*` | `$HOME/anaconda3` | 初始化 Conda/Spack，加载 `numactl@2.0.18`，退出两层 Conda，再激活 `linear`，设置 Conda CUDA 13.2 的 bin/lib/CCCL 路径并检查 nvcc，加载 `gcc@13.4.0` |
+
+当前登录节点实际名为 `qhjz-cpu-server`，因此同时保留请求中的 `qcjz` 和实际的 `qhjz`。两处根目录均支持 `KERNEL_CONDA_ROOT` / `KERNEL_SPACK_ROOT` 覆盖；其他 hostname 保留原来的当前集群默认配置，便于显式指定根目录迁移。`kernels/kda_megakernel/tools/env.sh` 与 `kernels/kda_module_dist/tools/env.sh` 都调用此入口并设置仓库 `PYTHONPATH`。
+
+分布式 KDA 还需要支持 `fla.ops.cp.build_cp_context`、`chunk_kda(cp_context=...)` 及 CP causal convolution 的 FLA 版本。仅 `import fla` 成功不能证明 CP 接口可用；在分配 GPU 的节点检查：
+
+```bash
+source skills/prepare-environment/envs.sh
+python -c 'import inspect; from fla.ops.cp import build_cp_context; from fla.ops.kda import chunk_kda; from fla.modules.convolution import causal_conv1d; print(inspect.signature(build_cp_context)); print(inspect.signature(chunk_kda)); print(inspect.signature(causal_conv1d))'
+```
 
 ## 环境配置
 

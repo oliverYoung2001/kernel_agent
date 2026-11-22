@@ -1,6 +1,6 @@
 # kernel_agent
 
-本仓库提供六个 GPU kernel 工作流 skill，以及 [KDA megakernel case](kernels/kda_megakernel/README.md)。下面说明如何在 Codex 中加载和使用；技能的详细规范见 [skills/README.md](skills/README.md)。
+本仓库提供六个 GPU kernel 工作流 skill，以及 [KDA megakernel](kernels/kda_megakernel/README.md) 和 [分布式 KDA module](kernels/kda_module_dist/README.md) 两种 workload。分布式版本提供 TP、Ulysses SP、KCP 三个 baseline、8/16 卡的 20 个输入配方及任意合法并行度的函数接口。下面说明如何在 Codex 中加载和使用；技能的详细规范见 [skills/README.md](skills/README.md)。
 
 ## 让 Codex 发现这些 skill
 
